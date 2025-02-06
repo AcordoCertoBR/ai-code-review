@@ -1,0 +1,36 @@
+name: "OpenAI Code Review Action"
+description: "Executa um code review usando a API da OpenAI e posta comentários no PR se houver problemas críticos."
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout do código
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Obter diff do Pull Request
+      id: get_diff
+      shell: bash
+      run: |
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
+        git fetch origin $BASE_REF --depth=1
+        DIFF=$(git diff origin/$BASE_REF HEAD)
+        echo "Diff obtido:"
+        echo "$DIFF"
+        # Utiliza o GITHUB_OUTPUT para salvar o diff completo
+        echo "diff<<EOF" >> $GITHUB_OUTPUT
+        echo "$DIFF" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Executar Code Review com OpenAI
+      id: code_review
+      shell: bash
+      run: |
+        # Salva o diff no arquivo fixo "diff.txt"
+        echo "${{ steps.get_diff.outputs.diff }}" > diff.txt
+        # Executa o script de code review
+        python3 code_review.py diff.txt
+      env:
+        OPENAI_TOKEN: ${{ secrets.OPENAI_ENTERPRISE_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
