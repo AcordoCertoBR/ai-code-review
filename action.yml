@@ -30,7 +30,3 @@ runs:
         echo "${{ steps.get_diff.outputs.diff }}" > diff.txt
         # Executa o script de code review
         python3 code_review.py diff.txt
-      env:
-        OPENAI_TOKEN: ${{ secrets.OPENAI_ENTERPRISE_TOKEN }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
