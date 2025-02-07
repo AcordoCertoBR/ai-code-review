@@ -26,7 +26,7 @@ runs:
       id: code_review
       shell: bash
       run: |
-        # Salva o diff no arquivo fixo "diff.txt"
-        echo "${{ steps.get_diff.outputs.diff }}" > diff.txt
+        # Salva o diff no arquivo fixo "diff.txt" usando printf para preservar o conteúdo sem interpretação
+        printf '%s\n' "${{ steps.get_diff.outputs.diff }}" > diff.txt
         # Executa o script de code review
         python3 code_review.py diff.txt
