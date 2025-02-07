@@ -26,7 +26,7 @@ runs:
       id: code_review
       shell: bash
       run: |
-        # Salva o diff no arquivo fixo "diff.txt" usando printf para preservar o conteúdo sem interpretação
+        # Salva o diff no arquivo fixo "diff.txt"
         printf '%s\n' "${{ steps.get_diff.outputs.diff }}" > diff.txt
-        # Executa o script de code review
-        python3 code_review.py diff.txt
+        # Executa o script de code review usando GITHUB_ACTION_PATH para apontar para o diretório da action
+        python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt
