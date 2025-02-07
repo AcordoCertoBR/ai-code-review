@@ -91,18 +91,21 @@ def ler_diff(arquivo):
 def construir_prompt(diff, main_language=None):
     language_info = ""
     if main_language:
-        language_info = f" Este repositório utiliza predominantemente {main_language}.\n\n"
+        language_info = f"Este repositório utiliza predominantemente {main_language}.\n\n"
     
     prompt = (
         "Segue abaixo o diff completo para análise:\n\n"
         "```diff\n"
         f"{diff}\n"
         "```\n\n"
-        "Você é um code reviewer experiente, capaz de avaliar códigos escritos em diversas linguagens, "
-        "incluindo " + language_info +
-        "Sua tarefa é identificar e listar quaisquer problemas críticos no código, como erros de sintaxe, falhas "
-        "de segurança, bugs críticos ou violações das boas práticas de programação, levando em conta as convenções "
-        "de cada linguagem. Além disso, liste sugestões de melhoria que não sejam críticas.\n\n"
+        "Você é um code reviewer experiente, com amplo conhecimento em diversas linguagens (por exemplo, Terraform, Go, React, Python e JavaScript). "
+        "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação, "
+        "levando em conta as convenções de cada linguagem. Considere as seguintes orientações:\n\n"
+        "1. Se uma atribuição de variável para uma string apresenta o valor entre aspas (simples ou duplas), essa sintaxe deve ser considerada correta.\n"
+        "2. Linhas que contêm texto isolado (por exemplo, linhas de teste ou comentários informais) devem ser avaliadas com cautela e, se não fizerem parte do código funcional, não devem ser marcadas como erros críticos.\n"
+        "3. Verifique se o código segue as convenções e boas práticas da linguagem em que foi escrito.\n\n"
+        f"{language_info}"
+        "Além disso, liste sugestões de melhoria que não sejam críticas.\n\n"
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": ["descrição do problema 1", "descrição do problema 2", ...],\n'
