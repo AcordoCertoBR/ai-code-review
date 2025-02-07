@@ -30,7 +30,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Executar Code Review com OpenAI
-        uses: AcordoCertoBR/ai-code-review@v1.0.6
+        uses: AcordoCertoBR/ai-code-review@v1.0.7
 ```
 
 ### 2️⃣ Configurar os Segredos do GitHub
