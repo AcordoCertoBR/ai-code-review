@@ -15,7 +15,7 @@ runs:
       run: |
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         git fetch origin "$BASE_REF" --depth=1
-        DIFF=$(git diff origin/"$BASE_REF" HEAD)
+        DIFF=$(git diff -U5 origin/"$BASE_REF" HEAD)
         echo "Diff obtido:"
         echo "$DIFF"
         # Salva o diff no output usando o GITHUB_OUTPUT

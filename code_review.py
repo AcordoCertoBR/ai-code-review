@@ -94,7 +94,8 @@ def construir_prompt(diff, main_language=None):
         language_info = f"Este repositório utiliza predominantemente {main_language}.\n\n"
     
     prompt = (
-        "Segue abaixo o diff completo para análise:\n\n"
+        "Segue abaixo o diff completo para análise, incluindo algumas linhas de contexto "
+        "acima e abaixo das mudanças para fornecer mais clareza:\n\n"
         "```diff\n"
         f"{diff}\n"
         "```\n\n"
