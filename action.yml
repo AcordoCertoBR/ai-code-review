@@ -31,6 +31,3 @@ runs:
         printf '%s\n' "${{ steps.get_diff.outputs.diff }}" > diff.txt
         # Executa o script de code review utilizando o caminho absoluto da action
         python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt
-      env:
-        OPENAI_TOKEN: ${{ secrets.OPENAI_ENTERPRISE_TOKEN }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
