@@ -4,6 +4,11 @@ description: "Executa um code review usando a API da OpenAI e posta comentários
 runs:
   using: "composite"
   steps:
+    - name: Checkout do código
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
     - name: Obter diff do Pull Request
       id: get_diff
       shell: bash
