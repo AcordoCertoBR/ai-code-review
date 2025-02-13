@@ -1,6 +1,13 @@
 $schema: "https://json.schemastore.org/github-action.json"
 name: "OpenAI Code Review Action"
-description: "Executa um code review usando a API da OpenAI e posta comentários no PR se houver problemas críticos."
+description: "Executa um code review usando a API da OpenAI e cria uma revisão no PR com comentários inline se houver problemas críticos."
+
+inputs:
+  ignore_extensions:
+    description: "Extensões de arquivos a serem ignoradas, separadas por vírgula (ex.: .json,.xml). Por padrão, nenhum arquivo é ignorado."
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -32,8 +39,11 @@ runs:
     - name: Executar Code Review com OpenAI
       id: code_review
       shell: bash
+      env:
+        IGNORE_EXTENSIONS: ${{ inputs.ignore_extensions }}
       run: |
-        # Salva o diff no arquivo fixo "diff.txt" usando printf para preservar a formatação
+        # Salva o diff no arquivo "diff.txt" preservando a formatação
         printf '%s\n' "${{ steps.get_diff.outputs.diff }}" > diff.txt
-        # Executa o script code_review.py utilizando o caminho absoluto definido pela variável GITHUB_ACTION_PATH
+        # Executa o script code_review.py utilizando o caminho absoluto da action
         python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt
+        
