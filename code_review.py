@@ -5,6 +5,10 @@ import json
 import requests
 import re
 
+def debug_log(msg):
+    if os.environ.get("DEBUG", "").lower() == "true":
+        print(f"[DEBUG] {msg}")
+
 def get_repo_main_language():
     token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")  # formato: "owner/repo"
@@ -40,6 +44,7 @@ def filtrar_diff(diff_text, ignored_extensions):
                 current_file = partes[3][2:]
                 if any(current_file.endswith(ext) for ext in ignored_extensions):
                     ignorar = True
+                    debug_log(f"Ignorando arquivo {current_file} por extensão.")
                 else:
                     ignorar = False
             else:
@@ -123,12 +128,12 @@ def processar_resposta(api_response):
 
 def mapear_posicao_e_hunk(diff, target_file, target_line):
     """
-    Mapeia o número da linha do arquivo (novo) para a posição correspondente no diff e extrai o diff hunk.
+    Mapeia o número da linha do arquivo (novo) para a posição correspondente no diff.
     Retorna uma tupla (position, diff_hunk) ou (None, None) se não encontrar.
     """
     linhas = diff.splitlines()
     current_file = None
-    pos_diff = 0  # contador de linhas no diff (1-indexado)
+    pos_diff = 0  # contador (1-indexado)
     i = 0
     while i < len(linhas):
         linha = linhas[i]
@@ -137,51 +142,47 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
             partes = linha.split()
             if len(partes) >= 4:
                 current_file = partes[3][2:]
+                debug_log(f"Novo arquivo detectado: {current_file}")
             else:
                 current_file = None
             i += 1
             continue
-        # Procura por hunks apenas se estivermos no arquivo alvo
+        # Trabalha apenas no arquivo alvo
         if current_file == target_file and linha.startswith("@@"):
-            # Extrai o header do hunk
-            hunk_header = linha
-            m = re.search(r'\+(\d+)(?:,(\d+))?', hunk_header)
+            debug_log(f"Encontrado hunk para {current_file} na linha {i+1}: {linha}")
+            m = re.search(r'\+(\d+)(?:,(\d+))?', linha)
             if m:
                 new_start = int(m.group(1))
                 new_count = int(m.group(2)) if m.group(2) else 1
+                debug_log(f"Hunk header: new_start={new_start}, new_count={new_count}")
             else:
                 new_start = None
-            # Se o target_line não estiver nesse hunk, pula para o próximo
             if new_start is None or not (new_start <= target_line < new_start + new_count):
-                # Pula as linhas deste hunk
+                debug_log(f"Target line {target_line} não está neste hunk (linha inicia em {new_start}).")
                 i += 1
                 while i < len(linhas) and not (linhas[i].startswith("@@") or linhas[i].startswith("diff --git ")):
                     pos_diff += 1
                     i += 1
                 continue
-            # Se estiver no hunk, extraia-o
-            hunk_start = i
+            # Se estiver neste hunk, percorre as linhas
             hunk_lines = [linha]
             i += 1
             current_new_line = new_start
-            comment_position = None
             while i < len(linhas) and not (linhas[i].startswith("@@") or linhas[i].startswith("diff --git ")):
-                hunk_lines.append(linhas[i])
+                linha_atual = linhas[i]
+                hunk_lines.append(linha_atual)
                 pos_diff += 1
-                # Considere apenas linhas de contexto ou adição
-                if linhas[i].startswith(' ') or linhas[i].startswith('+'):
+                if linha_atual.startswith(' ') or linha_atual.startswith('+'):
                     if current_new_line == target_line:
-                        # A posição do comentário é a posição da linha atual no diff
-                        comment_position = pos_diff
-                        # O diff hunk é do header até o final deste hunk
+                        debug_log(f"Mapeado target_line {target_line} para posição {pos_diff} no diff.")
                         diff_hunk = "\n".join(hunk_lines)
-                        return comment_position, diff_hunk
+                        return pos_diff, diff_hunk
                     current_new_line += 1
                 i += 1
-            # Se sair do hunk sem achar, continua
             continue
         else:
             i += 1
+    debug_log(f"Não foi possível mapear {target_file}:{target_line} para uma posição válida no diff.")
     return None, None
 
 def post_review_to_pr(review_body, inline_comments, diff):
@@ -219,7 +220,8 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
+        pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
+        debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
         if pos is not None:
             comentarios_inline.append({
                 "path": arquivo,
@@ -232,15 +234,17 @@ def post_review_to_pr(review_body, inline_comments, diff):
     if comentarios_nao_inline:
         review_body += "\n\nComentários adicionais:\n" + "\n".join(comentarios_nao_inline)
 
-    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
     payload = {
         "body": review_body,
         "event": "REQUEST_CHANGES",
         "comments": comentarios_inline
+    }
+    debug_log(f"Payload da review: {json.dumps(payload, indent=2)}")
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code in [200, 201]:
