@@ -261,6 +261,17 @@ def post_review_to_pr(review_body, inline_comments, diff):
         print(f"Falha ao criar review. Status code: {response.status_code}")
         print(response.text)
 
+def processar_resposta(api_response):
+    try:
+        conteudo = api_response["choices"][0]["message"]["content"]
+        resultado = json.loads(conteudo)
+        return resultado
+    except Exception as e:
+        print("Erro ao processar a resposta da API. Exceção:", e)
+        print("Resposta completa recebida:")
+        print(json.dumps(api_response, indent=2, ensure_ascii=False))
+        sys.exit(1)
+
 def main():
     if len(sys.argv) < 2:
         print("🚨 Uso: python3 code_review.py <arquivo_diff>")
