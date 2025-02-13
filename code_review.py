@@ -142,68 +142,67 @@ def chamar_api_openai(prompt, token):
     
     return response.json()
 
-def mapear_posicao(diff, target_file, target_line):
+def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
-    Mapeia o número da linha do arquivo (novo) para o valor de position no diff,
-    conforme a definição do GitHub: a contagem (a partir do primeiro cabeçalho @@)
-    continua através dos hunks até encontrar a linha correspondente.
+    Converte o número da linha do arquivo (target_line) para o valor de position
+    do diff do arquivo target_file. A contagem é feita a partir do primeiro hunk
+    (linha imediatamente abaixo do cabeçalho "@@" é posição 1) e prossegue de forma
+    contínua através de todos os hunks do arquivo.
     
-    Retorna:
-      - O valor de position (um inteiro) se encontrado, ou None se não encontrado.
+    Um offset opcional (line_offset) pode ser somado para ajustar diferenças.
     """
-    linhas = diff.splitlines()
+    lines = diff.splitlines()
     file_block = []
     collecting = False
-    # Isola o bloco de diff referente ao arquivo target_file
-    for line in linhas:
+    # Isola o bloco de diff para o arquivo alvo
+    for line in lines:
         if line.startswith("diff --git "):
             partes = line.split()
             if len(partes) >= 4:
-                current_file = partes[3][2:]
-                if current_file == target_file:
+                cur_file = partes[3][2:]
+                if cur_file == target_file:
                     collecting = True
-                    file_block = []  # reinicia o bloco para este arquivo
+                    file_block = []
                 else:
                     if collecting:
-                        break  # finalizou o bloco do arquivo desejado
+                        break
                     collecting = False
         elif collecting:
             file_block.append(line)
     if not file_block:
         return None
 
-    total_position = 0  # posição relativa: contada a partir do primeiro @@ deste arquivo
-    in_hunk = False
-    current_new_line = None
-    # Itera sobre o bloco do arquivo
+    diff_position = 0  # contador global do diff (conforme GitHub espera)
+    simulated_new_line = None  # simula a numeração do novo arquivo
     for line in file_block:
         if line.startswith("@@"):
-            # Encontrou um hunk – parse do cabeçalho
-            in_hunk = True
-            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            # No cabeçalho, extrai o número da primeira linha do novo arquivo
+            m = re.search(r'\+(\d+)', line)
             if m:
-                current_new_line = int(m.group(1))
+                simulated_new_line = int(m.group(1))
             else:
-                current_new_line = None
-            continue  # não conta a linha do cabeçalho
-        if in_hunk:
-            # Para cada linha do hunk, incrementa o contador de posição
-            total_position += 1
-            # Se a linha é de contexto ou adição, ela corresponde a uma linha do novo arquivo
-            if line.startswith(" ") or line.startswith("+"):
-                if current_new_line == target_line:
-                    return total_position
-                current_new_line += 1
-            # Linhas de remoção não incrementam o número da linha no novo arquivo,
-            # mas contam para o valor de position
+                simulated_new_line = 0
+            continue  # o cabeçalho não conta para a posição
+        # Para cada linha do corpo do diff (de qualquer tipo), incrementa diff_position
+        diff_position += 1
+        # Se a linha está presente no novo arquivo (contexto ou adição)
+        if line.startswith(" ") or line.startswith("+"):
+            # Se a linha simulada corresponder ao target, retorna (acrescido do offset)
+            if simulated_new_line == target_line:
+                return diff_position + line_offset
+            simulated_new_line += 1
     return None
 
 def mapear_posicao_e_hunk(diff, target_file, target_line):
     """
-    Apenas utiliza a função mapear_posicao e retorna (position, None)
-    (não usamos diff_hunk pois a API do GitHub não o aceita).
+    Retorna uma tupla (position, None) – não usamos diff_hunk (a API não o aceita).
+    Usa a função mapear_posicao e adiciona um offset (se definido na variável de ambiente LINE_OFFSET).
     """
-    pos = mapear_posicao(diff, target_file, target_line)
+    try:
+        offset = int(os.environ.get("LINE_OFFSET", "0"))
+    except Exception:
+        offset = 0
+    pos = mapear_posicao(diff, target_file, target_line, offset)
     return pos, None
 
 def post_review_to_pr(review_body, inline_comments, diff):
