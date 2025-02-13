@@ -146,15 +146,15 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
     Converte o número da linha do arquivo (target_line) para o valor de position
     do diff do arquivo target_file. A contagem é feita a partir do primeiro hunk
-    (linha imediatamente abaixo do cabeçalho "@@" é posição 1) e prossegue de forma
+    (a linha imediatamente abaixo do cabeçalho "@@" é position 1) e continua de forma
     contínua através de todos os hunks do arquivo.
     
-    Um offset opcional (line_offset) pode ser somado para ajustar diferenças.
+    Um offset opcional (line_offset) pode ser somado para ajustes.
     """
     lines = diff.splitlines()
     file_block = []
     collecting = False
-    # Isola o bloco de diff para o arquivo alvo
+    # Isola o bloco do diff referente ao arquivo target_file
     for line in lines:
         if line.startswith("diff --git "):
             partes = line.split()
@@ -172,31 +172,34 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     if not file_block:
         return None
 
-    diff_position = 0  # contador global do diff (conforme GitHub espera)
+    diff_position = 0  # contador global do diff para o arquivo
     simulated_new_line = None  # simula a numeração do novo arquivo
     for line in file_block:
         if line.startswith("@@"):
-            # No cabeçalho, extrai o número da primeira linha do novo arquivo
+            # Cabeçalho do hunk: extrai o número da primeira linha do novo arquivo
             m = re.search(r'\+(\d+)', line)
             if m:
                 simulated_new_line = int(m.group(1))
             else:
                 simulated_new_line = 0
-            continue  # o cabeçalho não conta para a posição
-        # Para cada linha do corpo do diff (de qualquer tipo), incrementa diff_position
+            continue  # não conta o cabeçalho
+        # Para cada linha do corpo do diff, incrementa a posição global
         diff_position += 1
-        # Se a linha está presente no novo arquivo (contexto ou adição)
+        # Se a linha faz parte do novo arquivo (contexto ou adição)
         if line.startswith(" ") or line.startswith("+"):
-            # Se a linha simulada corresponder ao target, retorna (acrescido do offset)
+            # Se por alguma razão simulated_new_line ainda estiver None, seta para 0
+            if simulated_new_line is None:
+                simulated_new_line = 0
+            # Se a linha atual corresponde à target_line, retorna a posição calculada
             if simulated_new_line == target_line:
                 return diff_position + line_offset
-            simulated_new_line += 1
+            # Incrementa o contador de linhas do novo arquivo
+            simulated_new_line = simulated_new_line + 1
     return None
 
 def mapear_posicao_e_hunk(diff, target_file, target_line):
     """
-    Retorna uma tupla (position, None) – não usamos diff_hunk (a API não o aceita).
-    Usa a função mapear_posicao e adiciona um offset (se definido na variável de ambiente LINE_OFFSET).
+    Retorna (position, None), utilizando mapear_posicao para calcular a posição.
     """
     try:
         offset = int(os.environ.get("LINE_OFFSET", "0"))
