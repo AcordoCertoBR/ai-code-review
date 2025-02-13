@@ -9,6 +9,33 @@ def debug_log(msg):
     if os.environ.get("DEBUG", "").lower() == "true":
         print(f"[DEBUG] {msg}")
 
+def get_pr_diff():
+    """
+    Obtém o diff oficial da PR usando a API do GitHub.
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not (token and repo and event_path):
+        print("Variáveis de ambiente necessárias não definidas.")
+        sys.exit(1)
+    with open(event_path, "r") as f:
+        event = json.load(f)
+    pr_number = event.get("pull_request", {}).get("number")
+    if not pr_number:
+        print("Não foi possível identificar o número da PR.")
+        sys.exit(1)
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3.diff"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print("Erro ao obter o diff da PR:", response.status_code, response.text)
+        sys.exit(1)
+    return response.text
+
 def get_repo_main_language():
     token = os.environ.get("GITHUB_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")  # formato: "owner/repo"
@@ -280,8 +307,9 @@ def main():
         print("🚨 Uso: python3 code_review.py <arquivo_diff>")
         sys.exit(1)
     
-    arquivo_diff = sys.argv[1]
-    diff = ler_diff(arquivo_diff)
+    diff = get_pr_diff()
+    debug_log("Diff oficial obtido:")
+    debug_log(diff)
 
     ignored_extensions = os.environ.get("IGNORE_EXTENSIONS", "")
     if ignored_extensions:
