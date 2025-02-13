@@ -208,7 +208,7 @@ def post_review_to_pr(review_body, inline_comments, diff):
     commit_id = None
     if "pull_request" in event:
         pr_number = event["pull_request"]["number"]
-        # Obtém o SHA do commit HEAD do PR
+        # Extrai o SHA do commit HEAD do PR
         commit_id = event["pull_request"].get("head", {}).get("sha")
     elif "issue" in event and "pull_request" in event["issue"]:
         pr_number = event["issue"]["number"]
@@ -227,15 +227,14 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
+        # Faz o mapeamento da posição; descartamos o diff_hunk retornado
+        pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
-        # Se conseguir mapear e o diff_hunk não estiver vazio, inclui o comentário inline
-        if pos is not None and diff_hunk:
+        if pos is not None:
             comentarios_inline.append({
                 "path": arquivo,
                 "position": pos,
-                "body": descricao,
-                "diff_hunk": diff_hunk
+                "body": descricao
             })
         else:
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
