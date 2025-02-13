@@ -228,18 +228,17 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        # Realiza o mapeamento da posição – descartamos o diff_hunk
+        # Realiza o mapeamento da posição – ignoramos o diff_hunk
         pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
-        pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
-        if pos is not None and diff_hunk and diff_hunk.strip() != "":
+        if pos is not None:
             comentarios_inline.append({
                 "path": arquivo,
                 "position": pos,
-                "body": descricao,
-                "diff_hunk": diff_hunk
+                "body": descricao
             })
         else:
+            # Se não conseguimos mapear para uma posição válida, adiciona no corpo da review
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
 
     if comentarios_nao_inline:
