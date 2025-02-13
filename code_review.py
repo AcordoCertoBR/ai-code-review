@@ -142,76 +142,69 @@ def chamar_api_openai(prompt, token):
     
     return response.json()
 
-def mapear_posicao_e_hunk(diff, target_file, target_line):
+def mapear_posicao(diff, target_file, target_line):
     """
-    Mapeia o número da linha do arquivo (novo) para a posição correspondente no diff e extrai o diff hunk.
-    
-    Parâmetros:
-      - diff: String contendo o diff completo.
-      - target_file: Caminho do arquivo alvo.
-      - target_line: Número da linha no arquivo (novo) a ser mapeada.
+    Mapeia o número da linha do arquivo (novo) para o valor de position no diff,
+    conforme a definição do GitHub: a contagem (a partir do primeiro cabeçalho @@)
+    continua através dos hunks até encontrar a linha correspondente.
     
     Retorna:
-      - Uma tupla (position, diff_hunk) se encontrar o mapeamento, ou (None, None) caso contrário.
+      - O valor de position (um inteiro) se encontrado, ou None se não encontrado.
     """
     linhas = diff.splitlines()
-    current_file = None
-    pos_diff = 0  # contador das linhas do diff (1-indexado)
-    i = 0
-    while i < len(linhas):
-        linha = linhas[i]
-        pos_diff += 1
-        if linha.startswith("diff --git "):
-            partes = linha.split()
+    file_block = []
+    collecting = False
+    # Isola o bloco de diff referente ao arquivo target_file
+    for line in linhas:
+        if line.startswith("diff --git "):
+            partes = line.split()
             if len(partes) >= 4:
                 current_file = partes[3][2:]
-                debug_log(f"Novo arquivo detectado: {current_file}")
-            else:
-                current_file = None
-            i += 1
-            continue
-        # Processa apenas se estivermos no arquivo alvo
-        if current_file == target_file and linha.startswith("@@"):
-            debug_log(f"Encontrado hunk para {current_file} na linha {i+1}: {linha}")
-            m = re.search(r'\+(\d+)(?:,(\d+))?', linha)
+                if current_file == target_file:
+                    collecting = True
+                    file_block = []  # reinicia o bloco para este arquivo
+                else:
+                    if collecting:
+                        break  # finalizou o bloco do arquivo desejado
+                    collecting = False
+        elif collecting:
+            file_block.append(line)
+    if not file_block:
+        return None
+
+    total_position = 0  # posição relativa: contada a partir do primeiro @@ deste arquivo
+    in_hunk = False
+    current_new_line = None
+    # Itera sobre o bloco do arquivo
+    for line in file_block:
+        if line.startswith("@@"):
+            # Encontrou um hunk – parse do cabeçalho
+            in_hunk = True
+            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
-                new_start = int(m.group(1))
-                new_count = int(m.group(2)) if m.group(2) else 1
-                debug_log(f"Hunk header: new_start={new_start}, new_count={new_count}")
+                current_new_line = int(m.group(1))
             else:
-                new_start = None
-            # Se a linha alvo não estiver dentro deste hunk, pula para o próximo
-            if new_start is None or not (new_start <= target_line < new_start + new_count):
-                debug_log(f"Target line {target_line} não está neste hunk (linha inicia em {new_start}).")
-                i += 1
-                while i < len(linhas) and not (linhas[i].startswith("@@") or linhas[i].startswith("diff --git ")):
-                    pos_diff += 1
-                    i += 1
-                continue
-            # Se a linha alvo estiver neste hunk, percorre as linhas do hunk
-            hunk_lines = [linha]
-            i += 1
-            current_new_line = new_start
-            while i < len(linhas) and not (linhas[i].startswith("@@") or linhas[i].startswith("diff --git ")):
-                linha_atual = linhas[i]
-                hunk_lines.append(linha_atual)
-                pos_diff += 1
-                # Considere linhas de contexto ou adição
-                if linha_atual.startswith(' ') or linha_atual.startswith('+'):
-                    if current_new_line == target_line:
-                        debug_log(f"Mapeado target_line {target_line} para posição {pos_diff} no diff.")
-                        diff_hunk = "\n".join(hunk_lines)
-                        # Garante que o diff_hunk não esteja vazio e termine com uma nova linha
-                        if not diff_hunk.endswith("\n"):
-                            diff_hunk += "\n"
-                        return pos_diff, diff_hunk
-                    current_new_line += 1
-                i += 1
-            continue
-        else:
-            i += 1
-    debug_log(f"Não foi possível mapear {target_file}:{target_line} para uma posição válida no diff.")
-    return None, None
+                current_new_line = None
+            continue  # não conta a linha do cabeçalho
+        if in_hunk:
+            # Para cada linha do hunk, incrementa o contador de posição
+            total_position += 1
+            # Se a linha é de contexto ou adição, ela corresponde a uma linha do novo arquivo
+            if line.startswith(" ") or line.startswith("+"):
+                if current_new_line == target_line:
+                    return total_position
+                current_new_line += 1
+            # Linhas de remoção não incrementam o número da linha no novo arquivo,
+            # mas contam para o valor de position
+    return None
+
+def mapear_posicao_e_hunk(diff, target_file, target_line):
+    """
+    Apenas utiliza a função mapear_posicao e retorna (position, None)
+    (não usamos diff_hunk pois a API do GitHub não o aceita).
+    """
+    pos = mapear_posicao(diff, target_file, target_line)
+    return pos, None
 
 def post_review_to_pr(review_body, inline_comments, diff):
     token = os.environ.get("GITHUB_TOKEN")
