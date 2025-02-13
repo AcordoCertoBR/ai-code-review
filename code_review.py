@@ -174,6 +174,9 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
                     if current_new_line == target_line:
                         debug_log(f"Mapeado target_line {target_line} para posição {pos_diff} no diff.")
                         diff_hunk = "\n".join(hunk_lines)
+                        # Garante que o diff_hunk não esteja vazio e termine com uma nova linha
+                        if not diff_hunk.endswith("\n"):
+                            diff_hunk += "\n"
                         return pos_diff, diff_hunk
                     current_new_line += 1
                 i += 1
@@ -228,14 +231,15 @@ def post_review_to_pr(review_body, inline_comments, diff):
         # Realiza o mapeamento da posição – descartamos o diff_hunk
         pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
-        if pos is not None:
+        pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
+        if pos is not None and diff_hunk and diff_hunk.strip() != "":
             comentarios_inline.append({
                 "path": arquivo,
                 "position": pos,
-                "body": descricao
+                "body": descricao,
+                "diff_hunk": diff_hunk
             })
         else:
-            # Se não conseguimos mapear para uma posição válida, adiciona no corpo da review
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
 
     if comentarios_nao_inline:
