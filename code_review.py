@@ -115,25 +115,21 @@ def chamar_api_openai(prompt, token):
     
     return response.json()
 
-def processar_resposta(api_response):
-    try:
-        conteudo = api_response["choices"][0]["message"]["content"]
-        resultado = json.loads(conteudo)
-        return resultado
-    except Exception as e:
-        print("Erro ao processar a resposta da API. Exceção:", e)
-        print("Resposta completa recebida:")
-        print(json.dumps(api_response, indent=2, ensure_ascii=False))
-        sys.exit(1)
-
 def mapear_posicao_e_hunk(diff, target_file, target_line):
     """
-    Mapeia o número da linha do arquivo (novo) para a posição correspondente no diff.
-    Retorna uma tupla (position, diff_hunk) ou (None, None) se não encontrar.
+    Mapeia o número da linha do arquivo (novo) para a posição correspondente no diff e extrai o diff hunk.
+    
+    Parâmetros:
+      - diff: String contendo o diff completo.
+      - target_file: Caminho do arquivo alvo.
+      - target_line: Número da linha no arquivo (novo) a ser mapeada.
+    
+    Retorna:
+      - Uma tupla (position, diff_hunk) se encontrar o mapeamento, ou (None, None) caso contrário.
     """
     linhas = diff.splitlines()
     current_file = None
-    pos_diff = 0  # contador (1-indexado)
+    pos_diff = 0  # contador das linhas do diff (1-indexado)
     i = 0
     while i < len(linhas):
         linha = linhas[i]
@@ -147,7 +143,7 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
                 current_file = None
             i += 1
             continue
-        # Trabalha apenas no arquivo alvo
+        # Processa apenas se estivermos no arquivo alvo
         if current_file == target_file and linha.startswith("@@"):
             debug_log(f"Encontrado hunk para {current_file} na linha {i+1}: {linha}")
             m = re.search(r'\+(\d+)(?:,(\d+))?', linha)
@@ -157,6 +153,7 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
                 debug_log(f"Hunk header: new_start={new_start}, new_count={new_count}")
             else:
                 new_start = None
+            # Se a linha alvo não estiver dentro deste hunk, pula para o próximo
             if new_start is None or not (new_start <= target_line < new_start + new_count):
                 debug_log(f"Target line {target_line} não está neste hunk (linha inicia em {new_start}).")
                 i += 1
@@ -164,7 +161,7 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
                     pos_diff += 1
                     i += 1
                 continue
-            # Se estiver neste hunk, percorre as linhas
+            # Se a linha alvo estiver neste hunk, percorre as linhas do hunk
             hunk_lines = [linha]
             i += 1
             current_new_line = new_start
@@ -172,6 +169,7 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
                 linha_atual = linhas[i]
                 hunk_lines.append(linha_atual)
                 pos_diff += 1
+                # Considere linhas de contexto ou adição
                 if linha_atual.startswith(' ') or linha_atual.startswith('+'):
                     if current_new_line == target_line:
                         debug_log(f"Mapeado target_line {target_line} para posição {pos_diff} no diff.")
@@ -227,7 +225,7 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        # Faz o mapeamento da posição; descartamos o diff_hunk retornado
+        # Realiza o mapeamento da posição – descartamos o diff_hunk
         pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
         if pos is not None:
@@ -237,6 +235,7 @@ def post_review_to_pr(review_body, inline_comments, diff):
                 "body": descricao
             })
         else:
+            # Se não conseguimos mapear para uma posição válida, adiciona no corpo da review
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
 
     if comentarios_nao_inline:

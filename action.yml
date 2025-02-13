@@ -21,11 +21,12 @@ runs:
       shell: bash
       run: |
         BASE_REF="${{ github.event.pull_request.base.ref }}"
+        HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+        echo "Usando BASE_REF: $BASE_REF e HEAD_SHA: $HEAD_SHA"
         git fetch origin "$BASE_REF" --depth=1
-        DIFF=$(git diff -U5 origin/"$BASE_REF" HEAD)
+        DIFF=$(git diff -U5 "$BASE_REF" "$HEAD_SHA")
         echo "Diff obtido:"
         echo "$DIFF"
-        # Salva o diff no output usando o GITHUB_OUTPUT
         echo "diff<<EOF" >> "$GITHUB_OUTPUT"
         echo "$DIFF" >> "$GITHUB_OUTPUT"
         echo "EOF" >> "$GITHUB_OUTPUT"
