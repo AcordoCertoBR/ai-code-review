@@ -120,7 +120,7 @@ def chamar_api_openai(prompt, token):
             {"role": "system", "content": "Você é um code reviewer."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 10000
+        "max_completion_tokens": 10000
     }
     
     response = requests.post(url, headers=headers, json=payload)
