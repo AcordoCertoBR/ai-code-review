@@ -205,13 +205,20 @@ def post_review_to_pr(review_body, inline_comments, diff):
         event = json.load(f)
 
     pr_number = None
+    commit_id = None
     if "pull_request" in event:
         pr_number = event["pull_request"]["number"]
+        # Obtém o SHA do commit HEAD do PR
+        commit_id = event["pull_request"].get("head", {}).get("sha")
     elif "issue" in event and "pull_request" in event["issue"]:
         pr_number = event["issue"]["number"]
 
     if not pr_number:
         print("Não foi possível identificar o número do PR no payload do evento.")
+        return
+
+    if not commit_id:
+        print("Não foi possível identificar o commit_id do PR.")
         return
 
     comentarios_inline = []
@@ -222,11 +229,13 @@ def post_review_to_pr(review_body, inline_comments, diff):
         descricao = item.get("descricao")
         pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
-        if pos is not None:
+        # Se conseguir mapear e o diff_hunk não estiver vazio, inclui o comentário inline
+        if pos is not None and diff_hunk:
             comentarios_inline.append({
                 "path": arquivo,
                 "position": pos,
-                "body": descricao
+                "body": descricao,
+                "diff_hunk": diff_hunk
             })
         else:
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
@@ -237,6 +246,7 @@ def post_review_to_pr(review_body, inline_comments, diff):
     payload = {
         "body": review_body,
         "event": "REQUEST_CHANGES",
+        "commit_id": commit_id,
         "comments": comentarios_inline
     }
     debug_log(f"Payload da review: {json.dumps(payload, indent=2)}")
