@@ -219,13 +219,12 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        pos, diff_hunk = mapear_posicao_e_hunk(diff, arquivo, linha)
-        if pos is not None and diff_hunk:
+        pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
+        if pos is not None:
             comentarios_inline.append({
                 "path": arquivo,
                 "position": pos,
-                "body": descricao,
-                "diff_hunk": diff_hunk
+                "body": descricao
             })
         else:
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
