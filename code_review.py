@@ -144,12 +144,13 @@ def chamar_api_openai(prompt, token):
 
 def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
-    Converte o número da linha do arquivo (target_line) para o valor de position
-    do diff do arquivo target_file. A contagem é feita a partir do primeiro hunk
-    (a linha imediatamente abaixo do cabeçalho "@@" é position 1) e continua de forma
-    contínua através de todos os hunks do arquivo.
+    Mapeia o número da "posição" no diff para a linha alvo, considerando que a contagem
+    começa a partir da primeira linha imediatamente após o primeiro hunk header (que é posição 1).
     
-    Um offset opcional (line_offset) pode ser somado para ajustes.
+    O parâmetro target_line deve ser informado com base na contagem que o modelo retorna
+    (por exemplo, se o modelo diz que a linha com problema é "6", então target_line=6).
+    
+    É aplicado um offset (line_offset) para ajustar o resultado caso necessário.
     """
     lines = diff.splitlines()
     file_block = []
@@ -162,45 +163,37 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
                 cur_file = partes[3][2:]
                 if cur_file == target_file:
                     collecting = True
-                    file_block = []
+                    file_block = []  # reinicia para o arquivo desejado
                 else:
                     if collecting:
-                        break
+                        break  # finalizou o bloco do arquivo desejado
                     collecting = False
         elif collecting:
             file_block.append(line)
     if not file_block:
         return None
 
-    diff_position = 0  # contador global do diff para o arquivo
-    simulated_new_line = None  # simula a numeração do novo arquivo
+    cumulative_position = 0  # contagem cumulativa de linhas (não contando cabeçalhos @@)
+    simulated_line = None    # simula a contagem de linhas do novo arquivo, reiniciada a cada hunk
+    found = False
     for line in file_block:
         if line.startswith("@@"):
-            # Cabeçalho do hunk: extrai o número da primeira linha do novo arquivo
-            m = re.search(r'\+(\d+)', line)
-            if m:
-                simulated_new_line = int(m.group(1))
-            else:
-                simulated_new_line = 0
-            continue  # não conta o cabeçalho
-        # Para cada linha do corpo do diff, incrementa a posição global
-        diff_position += 1
-        # Se a linha faz parte do novo arquivo (contexto ou adição)
+            # Ao encontrar um hunk header, reinicia a contagem para este hunk
+            simulated_line = 1
+            continue  # o cabeçalho não conta para a posição
+        # Cada linha (que não é um cabeçalho) incrementa a posição cumulativa do diff
+        cumulative_position += 1
+        # Se a linha faz parte do novo arquivo (linhas de contexto ou adição)
         if line.startswith(" ") or line.startswith("+"):
-            # Se por alguma razão simulated_new_line ainda estiver None, seta para 0
-            if simulated_new_line is None:
-                simulated_new_line = 0
-            # Se a linha atual corresponde à target_line, retorna a posição calculada
-            if simulated_new_line == target_line:
-                return diff_position + line_offset
-            # Incrementa o contador de linhas do novo arquivo
-            simulated_new_line = simulated_new_line + 1
+            if simulated_line == target_line:
+                found = True
+                break
+            simulated_line += 1
+    if found:
+        return cumulative_position + line_offset
     return None
 
 def mapear_posicao_e_hunk(diff, target_file, target_line):
-    """
-    Retorna (position, None), utilizando mapear_posicao para calcular a posição.
-    """
     try:
         offset = int(os.environ.get("LINE_OFFSET", "0"))
     except Exception:
