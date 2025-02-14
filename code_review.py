@@ -300,18 +300,18 @@ def main():
         print("🚨 Uso: python3 code_review.py <arquivo_diff>")
         sys.exit(1)
     
-    diff = get_pr_diff()
+    # Se o arquivo de diff existir, use-o; caso contrário, obtenha via API.
+    diff_file = sys.argv[1]
+    if os.path.exists(diff_file):
+        diff = ler_diff(diff_file)
+    else:
+        diff = get_pr_diff()
+    
     debug_log("Diff oficial obtido:")
     debug_log(diff)
 
-    ignored_extensions = os.environ.get("IGNORE_EXTENSIONS", "")
-    if ignored_extensions:
-        ignored_list = [ext.strip() for ext in ignored_extensions.split(",") if ext.strip()]
-        diff = filtrar_diff(diff, ignored_list)
-    else:
-        ignored_list = []
-
-    if not diff.strip() or diff.strip() == "diff --git":
+    # Se o diff estiver vazio ou não tiver hunk(s), não há alterações significativas.
+    if not diff.strip() or "@@" not in diff:
         print("ℹ️  O diff está vazio ou não contém alterações significativas. Pulando o code review.")
         sys.exit(0)
     
