@@ -28,15 +28,8 @@ runs:
         # Calcula o merge base entre HEAD e origin/BASE_REF
         MERGE_BASE=$(git merge-base HEAD "origin/${BASE_REF}")
         echo "Merge base: $MERGE_BASE"
-        # Lista apenas os arquivos alterados a partir do merge base e ignora a pasta .github
-        changed_files=$(git diff --name-only "$MERGE_BASE" "$HEAD_SHA" | grep -v '^.github/')
-        echo "Arquivos alterados: $changed_files"
-        DIFF=""
-        # Para cada arquivo modificado, gera o diff individual e concatena
-        for file in $changed_files; do
-          diff_file=$(git diff -U5 "$MERGE_BASE" "$HEAD_SHA" -- "$file")
-          DIFF="${DIFF}\n${diff_file}"
-        done
+        # Gera o diff completo com 5 linhas de contexto
+        DIFF=$(git diff -U5 "$MERGE_BASE" "$HEAD_SHA")
         echo "Diff obtido:"
         echo "$DIFF"
         {
