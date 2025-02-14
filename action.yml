@@ -49,9 +49,9 @@ runs:
       shell: bash
       env:
         IGNORE_EXTENSIONS: ${{ inputs.ignore_extensions }}
+        DIFF_CONTENT: ${{ steps.get_diff.outputs.diff }}
       run: |
-        # Salva o diff no arquivo "diff.txt" preservando a formatação
-        printf '%s\n' "${{ steps.get_diff.outputs.diff }}" > diff.txt
+        # Escreve o conteúdo do diff (armazenado na variável DIFF_CONTENT) em diff.txt sem interpretar caracteres especiais
+        printf '%s\n' "$DIFF_CONTENT" > diff.txt
         # Executa o script code_review.py utilizando o caminho absoluto da action
-        python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt
-        
+        python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt "$IGNORE_EXTENSIONS"
