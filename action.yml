@@ -25,23 +25,22 @@ runs:
         echo "Usando BASE_REF: $BASE_REF e HEAD_SHA: $HEAD_SHA"
         # Busca o branch base (usando a referência remota)
         git fetch origin "$BASE_REF" --depth=1
-        # Obtém a lista de arquivos alterados
-        changed_files=$(git diff --name-only "origin/${BASE_REF}" "$HEAD_SHA")
+        # Obtém a lista de arquivos alterados, ignorando arquivos em .github/
+        changed_files=$(git diff --name-only "origin/${BASE_REF}" "$HEAD_SHA" | grep -v '^.github/')
         echo "Arquivos alterados: $changed_files"
         DIFF=""
-        # Itera sobre cada arquivo alterado e concatena o diff individual
         for file in $changed_files; do
-          # Se desejar ignorar arquivos com extensões específicas (por exemplo, .json ou .xml),
-          # você pode adicionar uma condição aqui.
           diff_file=$(git diff -U5 "origin/${BASE_REF}" "$HEAD_SHA" -- "$file")
-          DIFF="$DIFF\n$diff_file"
+          DIFF="${DIFF}\n${diff_file}"
         done
         echo "Diff obtido:"
         echo "$DIFF"
-        # Salva o diff no output
-        echo "diff<<EOF" >> "$GITHUB_OUTPUT"
-        echo "$DIFF" >> "$GITHUB_OUTPUT"
-        echo "EOF" >> "$GITHUB_OUTPUT"
+        # Escreve o diff no output usando printf para evitar interpretação pelo shell
+        {
+          echo "diff<<EOF"
+          printf "%s\n" "$DIFF"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Set GitHub Action Path
       shell: bash
