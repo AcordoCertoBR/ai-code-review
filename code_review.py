@@ -59,19 +59,29 @@ def get_repo_main_language():
     main_language = max(languages, key=languages.get)
     return main_language
 
-def filtrar_diff(diff_text, ignored_extensions):
+def filtrar_diff(diff_text, ignore_pattern):
+    """
+    Filtra o diff removendo os blocos de arquivos cujo nome casa com o padrão de regex fornecido.
+    Se ignore_pattern for uma string vazia, retorna o diff sem alterações.
+    """
+    if not ignore_pattern:
+        return diff_text
+
     linhas = diff_text.splitlines()
     diff_filtrado = []
     ignorar = False
     current_file = None
+
     for linha in linhas:
         if linha.startswith("diff --git "):
             partes = linha.split()
             if len(partes) >= 4:
+                # O nome do arquivo vem após "b/"
                 current_file = partes[3][2:]
-                if any(current_file.endswith(ext) for ext in ignored_extensions):
+                # Se o arquivo casa com o padrão, marcamos para ignorar
+                if re.search(ignore_pattern, current_file):
                     ignorar = True
-                    debug_log(f"Ignorando arquivo {current_file} por extensão.")
+                    debug_log(f"Ignorando arquivo {current_file} por regex '{ignore_pattern}'.")
                 else:
                     ignorar = False
             else:
@@ -306,10 +316,9 @@ def processar_resposta(api_response):
 
 def main():
     if len(sys.argv) < 2:
-        print("🚨 Uso: python3 code_review.py <arquivo_diff>")
+        print("🚨 Uso: python3 code_review.py <arquivo_diff> [ignore_regex]")
         sys.exit(1)
     
-    # Se o arquivo de diff existir, use-o; caso contrário, obtenha via API.
     diff_file = sys.argv[1]
     if os.path.exists(diff_file):
         diff = ler_diff(diff_file)
@@ -318,11 +327,16 @@ def main():
     
     debug_log("Diff oficial obtido:")
     debug_log(diff)
-
+    
     # Se o diff estiver vazio ou não tiver hunk(s), não há alterações significativas.
     if not diff.strip() or "@@" not in diff:
         print("ℹ️  O diff está vazio ou não contém alterações significativas. Pulando o code review.")
         sys.exit(0)
+    
+    # Se foi passado um padrão de regex para ignorar arquivos, aplica o filtro.
+    ignore_pattern = sys.argv[2] if len(sys.argv) > 2 else ""
+    if ignore_pattern:
+        diff = filtrar_diff(diff, ignore_pattern)
     
     main_language = get_repo_main_language()
     prompt = construir_prompt(diff, main_language)

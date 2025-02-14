@@ -3,8 +3,8 @@ name: "OpenAI Code Review Action"
 description: "Executa um code review usando a API da OpenAI e cria uma revisão no PR com comentários inline se houver problemas críticos."
 
 inputs:
-  ignore_extensions:
-    description: "Extensões de arquivos a serem ignoradas, separadas por vírgula (ex.: .json,.xml). Por padrão, nenhum arquivo é ignorado."
+  ignore_regex:
+    description: "Regex para ignorar arquivos ou diretórios. Exemplo: '.*vendor/.*'. Por padrão, nenhum arquivo é ignorado."
     required: false
     default: ""
 
@@ -48,10 +48,11 @@ runs:
       id: code_review
       shell: bash
       env:
-        IGNORE_EXTENSIONS: ${{ inputs.ignore_extensions }}
+        IGNORE_REGEX: ${{ inputs.ignore_regex }}
         DIFF_CONTENT: ${{ steps.get_diff.outputs.diff }}
       run: |
         # Escreve o conteúdo do diff (armazenado na variável DIFF_CONTENT) em diff.txt sem interpretar caracteres especiais
         printf '%s\n' "$DIFF_CONTENT" > diff.txt
         # Executa o script code_review.py utilizando o caminho absoluto da action
-        python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt "$IGNORE_EXTENSIONS"
+        # O script receberá o arquivo de diff e o padrão de ignore (pode ser vazio)
+        python3 "$GITHUB_ACTION_PATH/code_review.py" diff.txt "$IGNORE_REGEX"
