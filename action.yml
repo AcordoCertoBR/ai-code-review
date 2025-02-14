@@ -23,8 +23,10 @@ runs:
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         HEAD_SHA="${{ github.event.pull_request.head.sha }}"
         echo "Usando BASE_REF: $BASE_REF e HEAD_SHA: $HEAD_SHA"
+        # Busca o branch base (usando a referência remota)
         git fetch origin "$BASE_REF" --depth=1
-        DIFF=$(git diff -U5 "origin/${BASE_REF}" "$HEAD_SHA")
+        # Gera o diff, excluindo a pasta .github ou o arquivo específico
+        DIFF=$(git diff -U5 "origin/${BASE_REF}" "$HEAD_SHA" -- . ':(exclude).github/')
         echo "Diff obtido:"
         echo "$DIFF"
         echo "diff<<EOF" >> "$GITHUB_OUTPUT"
