@@ -144,46 +144,66 @@ def chamar_api_openai(prompt, token):
 
 def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
-    Mapeia o número de linha informado (target_line) – considerado relativo
-    ao bloco do diff (ignorando cabeçalhos) – para a posição do diff onde
-    será inserido o comentário inline.
+    Mapeia a linha do arquivo (target_line) para a posição do diff onde
+    o comentário inline deve ser inserido, considerando que a contagem
+    reinicia a cada hunk (após a linha do cabeçalho @@).
+    
+    Retorna a posição (índice) relativa ao hunk, ou None se não encontrar.
     """
     lines = diff.splitlines()
+    in_file = False
     file_block = []
-    collecting = False
 
-    # Isola o trecho do diff referente ao arquivo alvo
+    # Isola o bloco do diff referente ao arquivo target_file
     for line in lines:
         if line.startswith("diff --git "):
-            parts = line.split()
-            if len(parts) >= 4:
-                current_file = parts[3][2:]
-                if current_file == target_file:
-                    collecting = True
-                    file_block = []  # reinicia para o arquivo alvo
-                elif collecting:
-                    # Se já estávamos coletando e encontrou outro diff, para.
+            partes = line.split()
+            # O nome do arquivo de destino vem sem o "b/"
+            current_file = partes[3][2:]
+            if current_file == target_file:
+                in_file = True
+                file_block = []  # reinicia o bloco para esse arquivo
+            else:
+                if in_file:
+                    # Se já estávamos coletando e mudou de arquivo, interrompe.
                     break
-                else:
-                    collecting = False
-        elif collecting:
+                in_file = False
+        elif in_file:
             file_block.append(line)
 
     if not file_block:
         return None
 
-    # Conta apenas as linhas de contexto ou adição (ignorando cabeçalhos de hunk)
-    relative_line_count = 0
-    diff_position = 0
-    for line in file_block:
+    # Percorre o bloco do arquivo em busca dos hunks
+    i = 0
+    while i < len(file_block):
+        line = file_block[i]
         if line.startswith("@@"):
-            # Pula a linha de cabeçalho do hunk
-            continue
-        diff_position += 1
-        if line.startswith(" ") or line.startswith("+"):
-            relative_line_count += 1
-        if relative_line_count == target_line:
-            return diff_position + line_offset
+            # Exemplo de cabeçalho de hunk:
+            # @@ -50,10 +50,12 @@ func (s *CampaignTriggerService) Execute(...
+            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            if m:
+                new_start = int(m.group(1))
+            else:
+                new_start = 0
+
+            # Reinicia a contagem para este hunk: a primeira linha depois do @@ é position 1.
+            position_in_hunk = 0
+            current_line = new_start  # corresponde à numeração do arquivo novo
+            i += 1  # avança para as linhas do hunk
+            while i < len(file_block) and not file_block[i].startswith("@@"):
+                hunk_line = file_block[i]
+                # Apenas linhas de contexto (" ") ou adição ("+") aparecem no arquivo novo.
+                if hunk_line.startswith(" ") or hunk_line.startswith("+"):
+                    position_in_hunk += 1
+                    # Se a linha atual do arquivo novo for a desejada, retorna a posição no hunk.
+                    if current_line == target_line:
+                        return position_in_hunk + line_offset
+                    current_line += 1
+                # Linhas de deleção ("-") não são contadas no arquivo novo.
+                i += 1
+        else:
+            i += 1
 
     return None
 
