@@ -30,7 +30,7 @@ jobs:
       DEBUG: true
     steps:
       - name: Executar Code Review com OpenAI
-        uses: AcordoCertoBR/ai-code-review@v1.0.33
+        uses: AcordoCertoBR/ai-code-review@v1.0.38
         with:
           ignore_regex: "^(?:\.github/|.*vendor/.*|.*\.(?:json|xml)$|go\.(?:mod|sum)$)"
 ```
