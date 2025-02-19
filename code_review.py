@@ -156,9 +156,9 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
     Mapeia a linha do arquivo (target_line) para a posição do diff onde
     o comentário inline deve ser inserido, considerando que a contagem
-    reinicia a cada hunk (após a linha do cabeçalho @@).
+    reinicia a cada hunk (a linha imediatamente abaixo do cabeçalho "@@" é posição 1).
     
-    Retorna a posição (índice) relativa ao hunk, ou None se não encontrar.
+    Retorna a posição (um inteiro) ou None se não encontrar.
     """
     lines = diff.splitlines()
     in_file = False
@@ -168,15 +168,13 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     for line in lines:
         if line.startswith("diff --git "):
             partes = line.split()
-            # O nome do arquivo de destino vem sem o "b/"
             current_file = partes[3][2:]
             if current_file == target_file:
                 in_file = True
                 file_block = []  # reinicia o bloco para esse arquivo
             else:
                 if in_file:
-                    # Se já estávamos coletando e mudou de arquivo, interrompe.
-                    break
+                    break  # já coletamos o bloco desejado
                 in_file = False
         elif in_file:
             file_block.append(line)
@@ -190,27 +188,25 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
         line = file_block[i]
         if line.startswith("@@"):
             # Exemplo de cabeçalho de hunk:
-            # @@ -50,10 +50,12 @@ func (s *CampaignTriggerService) Execute(...
+            # @@ -70,6 +70,8 @@ ...
             m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
                 new_start = int(m.group(1))
             else:
                 new_start = 0
 
-            # Reinicia a contagem para este hunk: a primeira linha depois do @@ é position 1.
-            position_in_hunk = 0
+            # Inicia a contagem para este hunk: a primeira linha depois do cabeçalho é posição 1
+            position_in_hunk = 1
             current_line = new_start  # corresponde à numeração do arquivo novo
             i += 1  # avança para as linhas do hunk
             while i < len(file_block) and not file_block[i].startswith("@@"):
                 hunk_line = file_block[i]
                 # Apenas linhas de contexto (" ") ou adição ("+") aparecem no arquivo novo.
                 if hunk_line.startswith(" ") or hunk_line.startswith("+"):
-                    position_in_hunk += 1
-                    # Se a linha atual do arquivo novo for a desejada, retorna a posição no hunk.
                     if current_line == target_line:
                         return position_in_hunk + line_offset
                     current_line += 1
-                # Linhas de deleção ("-") não são contadas no arquivo novo.
+                    position_in_hunk += 1
                 i += 1
         else:
             i += 1
