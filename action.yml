@@ -20,17 +20,9 @@ runs:
       id: get_diff
       shell: bash
       run: |
-        BASE_REF="${{ github.event.pull_request.base.ref }}"
-        HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-        echo "Usando BASE_REF: $BASE_REF e HEAD_SHA: $HEAD_SHA"
-        # Baixa o branch base
-        git fetch origin "$BASE_REF" --depth=1
-        # Calcula o merge base entre HEAD e origin/BASE_REF
-        MERGE_BASE=$(git merge-base HEAD "origin/${BASE_REF}")
-        echo "Merge base: $MERGE_BASE"
-        # Gera o diff completo com 5 linhas de contexto
-        DIFF=$(git diff -U5 "$MERGE_BASE" "$HEAD_SHA")
-        echo "Diff obtido:"
+        echo "Obtendo diff oficial da PR..."
+        DIFF=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3.diff" "${{ github.event.pull_request.diff_url }}")
+        echo "Diff oficial obtido:"
         echo "$DIFF"
         {
           echo "diff<<EOF"
