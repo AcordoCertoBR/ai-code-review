@@ -314,6 +314,50 @@ def processar_resposta(api_response):
         print(json.dumps(api_response, indent=2, ensure_ascii=False))
         sys.exit(1)
 
+def approve_review():
+    """
+    Envia uma nova review com evento APPROVE para o PR, encerrando revisões anteriores.
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not (token and repo and event_path):
+        print("Variáveis de ambiente necessárias não definidas para aprovar a review.")
+        return
+
+    with open(event_path, "r") as f:
+        event = json.load(f)
+
+    pr_number = None
+    commit_id = None
+    if "pull_request" in event:
+        pr_number = event["pull_request"]["number"]
+        commit_id = event["pull_request"].get("head", {}).get("sha")
+    elif "issue" in event and "pull_request" in event["issue"]:
+        pr_number = event["issue"]["number"]
+
+    if not pr_number or not commit_id:
+        print("Não foi possível identificar o número do PR ou o commit_id.")
+        return
+
+    payload = {
+        "body": "Todos os problemas críticos foram resolvidos. Aprovação automática da revisão.",
+        "event": "APPROVE",
+        "commit_id": commit_id
+    }
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code in [200, 201]:
+        print("💬 Review aprovada com sucesso!")
+    else:
+        print(f"Falha ao aprovar review. Status code: {response.status_code}")
+        print(response.text)
+
 def main():
     if len(sys.argv) < 2:
         print("🚨 Uso: python3 code_review.py <arquivo_diff> [ignore_regex]")
@@ -371,12 +415,13 @@ def main():
     
     if problemas:
         review_body = "⚠️ **Code Review detectou problemas críticos!**\n\n" \
-                      "Por favor, verifique os comentários inline para detalhes sobre as mudanças necessárias."
+                    "Por favor, verifique os comentários inline para detalhes sobre as mudanças necessárias."
         post_review_to_pr(review_body, problemas, diff)
         print("\n⚠️ O Code Review detectou problemas críticos. Favor corrigir os itens listados e tentar novamente.")
         sys.exit(1)
     else:
         print("\n🎉 Code Review aprovado! Ótimo trabalho, continue assim! 👍")
+        approve_review()  # Envia uma review de aprovação para fechar a discussão
         sys.exit(0)
 
 if __name__ == '__main__':
