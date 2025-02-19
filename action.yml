@@ -20,8 +20,10 @@ runs:
       id: get_diff
       shell: bash
       run: |
-        echo "Obtendo diff oficial da PR..."
-        DIFF=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.diff" "${{ github.event.pull_request.diff_url }}")
+        echo "Obtendo diff oficial da PR via API..."
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        REPO="${{ github.repository }}"
+        DIFF=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.diff" "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}.diff")
         echo "Diff oficial obtido:"
         echo "$DIFF"
         {
