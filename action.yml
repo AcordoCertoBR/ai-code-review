@@ -21,7 +21,7 @@ runs:
       shell: bash
       run: |
         echo "Obtendo diff oficial da PR..."
-        DIFF=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3.diff" "${{ github.event.pull_request.diff_url }}")
+        DIFF=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.diff" "${{ github.event.pull_request.diff_url }}")
         echo "Diff oficial obtido:"
         echo "$DIFF"
         {
