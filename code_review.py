@@ -103,8 +103,7 @@ def ler_diff(arquivo):
 def construir_prompt(diff, main_language=None):
     language_info = f"Este repositório utiliza predominantemente {main_language}.\n\n" if main_language else ""
     prompt = (
-        "Segue abaixo o diff completo para análise, incluindo algumas linhas de contexto "
-        "acima e abaixo das mudanças para fornecer mais clareza:\n\n"
+        "Segue abaixo o diff completo para análise:\n\n"
         "```diff\n"
         f"{diff}\n"
         "```\n\n"
@@ -112,7 +111,7 @@ def construir_prompt(diff, main_language=None):
         "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação, "
         "levando em conta as convenções de cada linguagem. "
         "Além disso, para cada problema crítico, identifique a localização exata **no diff** onde o problema ocorreu, "
-        "informando o caminho do arquivo e a **posição no diff** (a contagem começa em 1 logo abaixo do cabeçalho '@@').\n\n"
+        "informando o caminho do arquivo e a **posição no diff**. A posição deve ser contada a partir da primeira linha logo abaixo do cabeçalho '@@' do hunk, sendo essa linha a posição 1.\n\n"
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": [\n'
