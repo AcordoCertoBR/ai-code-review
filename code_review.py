@@ -103,16 +103,14 @@ def ler_diff(arquivo):
 def construir_prompt(diff, main_language=None):
     language_info = f"Este repositório utiliza predominantemente {main_language}.\n\n" if main_language else ""
     prompt = (
-        "Segue abaixo o diff completo para análise, incluindo algumas linhas de contexto "
-        "acima e abaixo das mudanças para fornecer mais clareza:\n\n"
+        "Segue abaixo o diff completo para análise: \n\n"
         "```diff\n"
         f"{diff}\n"
         "```\n\n"
         "Você é um code reviewer experiente, com amplo conhecimento em diversas linguagens (por exemplo, Terraform, Go, React, Python e JavaScript). "
         "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação. "
         "Além disso, para cada problema crítico, identifique a localização exata no diff onde o problema ocorreu. "
-        "A contagem das posições deve iniciar imediatamente após o cabeçalho do hunk (a linha que começa com '@@'). A primeira linha logo após esse cabeçalho é considerada posição 1. "
-        "Use essa contagem para indicar com precisão a localização dos problemas, independentemente do diff analisado, sem utilizar exemplos específicos do diff atual.\n\n"
+        "A contagem das posições deve iniciar imediatamente após o cabeçalho do hunk (a linha que começa com '@@'). A primeira linha logo após esse cabeçalho é considerada posição 1 (independente se é uma linha vazia, uma remoção ou adição, quelquer linha deve ser contada). Use essa contagem para indicar com precisão a localização dos problemas.\n\n"
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": [\n'
