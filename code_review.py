@@ -109,8 +109,9 @@ def construir_prompt(diff, main_language=None):
         "```\n\n"
         "Você é um code reviewer experiente, com amplo conhecimento em diversas linguagens (por exemplo, Terraform, Go, React, Python e JavaScript). "
         "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação. "
-        "Além disso, para cada problema crítico, identifique a localização exata no diff onde o problema ocorreu. "
-        "Regra de contagem: A contagem das posições deve iniciar imediatamente após o cabeçalho do hunk (a linha que começa com '@@'). A primeira linha após esse cabeçalho é considerada posição 1. TODAS as linhas devem ser contadas – isto inclui linhas de adição (com '+'), linhas de remoção (com '-') e linhas vazias. Assim, cada linha, sem exceção, conta para a numeração usada para indicar a posição do problema. \n\n"
+        "Para cada problema crítico, identifique a localização no diff onde o problema ocorreu. Para identificar a posição será necessário seguir esta regra exatamente da forma descrita: "
+        "Regra de contagem: A contagem das posições deve iniciar imediatamente após o cabeçalho do hunk (a linha que começa com '@@'). A primeira linha após esse cabeçalho é considerada posição 1 (mesmo que for uma linha vazia ou apenas com espaços). TODAS as linhas devem ser contadas – isto inclui linhas de adição (com '+'), linhas de remoção (com '-') e linhas vazias ou com espaços. Assim, cada linha, sem exceção, conta para a numeração usada para indicar a posição do problema. \n\n"
+        
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": [\n'
