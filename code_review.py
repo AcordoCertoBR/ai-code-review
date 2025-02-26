@@ -103,15 +103,16 @@ def ler_diff(arquivo):
 def construir_prompt(diff, main_language=None):
     language_info = f"Este repositório utiliza predominantemente {main_language}.\n\n" if main_language else ""
     prompt = (
-        "Segue abaixo o diff completo para análise:\n\n"
+        "Segue abaixo o diff completo para análise, incluindo algumas linhas de contexto "
+        "acima e abaixo das mudanças para fornecer mais clareza:\n\n"
         "```diff\n"
         f"{diff}\n"
         "```\n\n"
         "Você é um code reviewer experiente, com amplo conhecimento em diversas linguagens (por exemplo, Terraform, Go, React, Python e JavaScript). "
-        "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação, "
-        "levando em conta as convenções de cada linguagem. "
-        "Além disso, para cada problema crítico, identifique a localização exata **no diff** onde o problema ocorreu, "
-        "informando o caminho do arquivo e a **posição no diff**. A posição deve ser contada a partir da primeira linha logo abaixo do cabeçalho '@@' do hunk, sendo essa linha a posição 1.\n\n"
+        "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação. "
+        "Além disso, para cada problema crítico, identifique a localização exata no diff onde o problema ocorreu. "
+        "A contagem das posições deve iniciar imediatamente após o cabeçalho do hunk (a linha que começa com '@@'). A primeira linha logo após esse cabeçalho é considerada posição 1. "
+        "Use essa contagem para indicar com precisão a localização dos problemas, independentemente do diff analisado, sem utilizar exemplos específicos do diff atual.\n\n"
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": [\n'
@@ -142,6 +143,8 @@ def chamar_api_openai(prompt, token):
     }
     
     response = requests.post(url, headers=headers, json=payload)
+    debug_log("Resposta da API do OpenAI:")
+    debug_log(response.text)
     
     if response.status_code != 200:
         print(f"Erro na chamada da API: {response.status_code} - {response.text}")
@@ -194,14 +197,13 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
             else:
                 new_start = 0
 
-            # A contagem relativa deste hunk começa com 1 para a primeira linha após o cabeçalho.
-            hunk_position = 0
+            hunk_position = 0  # contagem relativa no hunk: a primeira linha após o header é 1
             simulated_line = new_start
             i += 1  # pula o cabeçalho
             while i < len(file_block) and not file_block[i].startswith("@@") and not file_block[i].startswith("diff --git "):
                 hunk_line = file_block[i]
                 hunk_position += 1
-                # Se a linha não for uma remoção, ela aparece no novo arquivo.
+                # Contamos a linha se ela não for uma remoção.
                 if not hunk_line.startswith("-"):
                     if simulated_line == target_line:
                         return total_position + hunk_position + line_offset
@@ -218,12 +220,9 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
         offset = int(os.environ.get("LINE_OFFSET", "0"))
     except Exception:
         offset = 0
-    # Aqui ajustamos: se o modelo retorna um número que representa a linha original
-    # e queremos a posição no diff, podemos converter. Se o modelo já retornar a posição no diff,
-    # não é necessário. Neste caso, assumiremos que o modelo retornou a linha original,
-    # então somamos 1 para obter a posição correta.
-    target_line_adjusted = target_line + 1
-    pos = mapear_posicao(diff, target_file, target_line_adjusted, offset)
+    # Aqui assumimos que target_line é o número original e queremos a posição no diff,
+    # mas como o modelo agora deve retornar a posição no diff, usaremos esse valor diretamente.
+    pos = mapear_posicao(diff, target_file, target_line, offset)
     return pos, None
 
 def post_review_to_pr(review_body, inline_comments, diff):
@@ -265,18 +264,17 @@ def post_review_to_pr(review_body, inline_comments, diff):
     comentarios_nao_inline = []
     for item in inline_comments:
         arquivo = item.get("arquivo")
-        linha = item.get("linha")
+        # Aqui esperamos que o modelo retorne a chave "posicao" em vez de "linha"
+        posicao = item.get("posicao")
         descricao = item.get("descricao")
-        pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
-        debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
-        if pos is not None:
+        if posicao is not None:
             comentarios_inline.append({
                 "path": arquivo,
-                "position": pos,
+                "position": posicao,
                 "body": descricao
             })
         else:
-            comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
+            comentarios_nao_inline.append(f"{arquivo}: posição desconhecida -> {descricao}")
 
     if comentarios_nao_inline:
         review_body += "\n\nComentários adicionais:\n" + "\n".join(comentarios_nao_inline)
@@ -370,7 +368,6 @@ def main():
     debug_log("Diff oficial obtido:")
     debug_log(diff)
     
-    # Se o diff estiver vazio ou não tiver hunk(s), encerra.
     if not diff.strip() or "@@" not in diff:
         print("ℹ️  O diff está vazio ou não contém alterações significativas. Pulando o code review.")
         sys.exit(0)
@@ -399,9 +396,9 @@ def main():
         print("❌ Problemas críticos encontrados:")
         for p in problemas:
             arquivo = p.get("arquivo", "arquivo não especificado")
-            linha = p.get("linha", "linha não especificada")
+            posicao = p.get("posicao", "posição não especificada")
             descricao = p.get("descricao", "sem descrição")
-            print(f"  • {arquivo}:{linha} -> {descricao}")
+            print(f"  • {arquivo}:posição {posicao} -> {descricao}")
     else:
         print("✅ Nenhum problema crítico encontrado!")
     
@@ -418,7 +415,7 @@ def main():
         sys.exit(1)
     else:
         print("\n🎉 Code Review aprovado! Ótimo trabalho, continue assim! 👍")
-        approve_review()  # Envia uma review de aprovação para fechar a discussão
+        approve_review()
         sys.exit(0)
 
 if __name__ == '__main__':
