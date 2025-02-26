@@ -156,34 +156,42 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
     Mapeia a linha do arquivo (target_line) para a posição do diff onde
     o comentário inline deve ser inserido. A contagem é feita acumulando os hunks
-    do diff do arquivo target_file. Dentro de cada hunk, a contagem relativa reinicia
-    (a primeira linha após o cabeçalho @@ é posição 1) e é acumulada ao longo dos hunks.
+    do diff do arquivo target_file. Dentro de cada hunk, a contagem reinicia 
+    (a primeira linha após o cabeçalho "@@" é considerada posição 1) e é acumulada 
+    ao longo dos hunks.
     
-    Linhas de contexto e de adição (aquelas que começam com " " ou "+") são contadas.
-    Se uma linha estiver vazia (i.e. ""), ela também é considerada, se estivermos dentro de um hunk.
+    Em vez de contar apenas linhas que começam com " " ou "+", contamos todas as
+    linhas que não são remoções (ou seja, que não começam com "-").
     
     Retorna o valor de position (um inteiro) ou None se não encontrar.
     """
     lines = diff.splitlines()
     in_file = False
-    total_diff_position = 0  # posição acumulada do diff para o arquivo
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # Detecta o início do bloco do arquivo
+    file_block = []
+
+    # Isola o bloco do diff referente ao arquivo target_file
+    for line in lines:
         if line.startswith("diff --git "):
             partes = line.split()
             current_file = partes[3][2:]
             if current_file == target_file:
                 in_file = True
+                file_block = []  # reinicia o bloco para esse arquivo
             else:
                 if in_file:
                     break  # já coletamos o bloco desejado
                 in_file = False
-            i += 1
-            continue
+        elif in_file:
+            file_block.append(line)
 
-        if in_file and line.startswith("@@"):
+    if not file_block:
+        return None
+
+    total_position = 0  # posição acumulada do diff para o arquivo
+    i = 0
+    while i < len(file_block):
+        line = file_block[i]
+        if line.startswith("@@"):
             # Cabeçalho do hunk – extrai o número da primeira linha do novo arquivo.
             m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
@@ -191,22 +199,20 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
             else:
                 new_start = 0
 
-            # Reinicia a contagem para este hunk: a linha logo após o cabeçalho é considerada posição 1.
+            # A primeira linha após o cabeçalho é considerada posição 1
             hunk_position = 0
             simulated_line = new_start
             i += 1  # pula o cabeçalho
-            # Percorre as linhas deste hunk
-            while i < len(lines) and not lines[i].startswith("@@") and not lines[i].startswith("diff --git "):
-                current_line = lines[i]
+            while i < len(file_block) and not file_block[i].startswith("@@") and not file_block[i].startswith("diff --git "):
+                hunk_line = file_block[i]
                 hunk_position += 1
-                # Se a linha começa com " " ou "+", ou está vazia, conte-a como linha do novo arquivo.
-                if current_line.startswith(" ") or current_line.startswith("+") or current_line == "":
+                # Se a linha não for uma remoção, ela está presente no novo arquivo
+                if not hunk_line.startswith("-"):
                     if simulated_line == target_line:
-                        return total_diff_position + hunk_position + line_offset
+                        return total_position + hunk_position + line_offset
                     simulated_line += 1
-                # Se a linha começa com "-", ela não aparece no novo arquivo, mas conta para a posição do diff.
                 i += 1
-            total_diff_position += hunk_position
+            total_position += hunk_position
         else:
             i += 1
 
