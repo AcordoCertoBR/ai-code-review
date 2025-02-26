@@ -78,7 +78,6 @@ def filtrar_diff(diff_text, ignore_pattern):
             if len(partes) >= 4:
                 # O nome do arquivo vem após "b/"
                 current_file = partes[3][2:]
-                # Se o arquivo casa com o padrão, marcamos para ignorar
                 if re.search(ignore_pattern, current_file):
                     ignorar = True
                     debug_log(f"Ignorando arquivo {current_file} por regex '{ignore_pattern}'.")
@@ -111,22 +110,21 @@ def construir_prompt(diff, main_language=None):
         "```\n\n"
         "Você é um code reviewer experiente, com amplo conhecimento em diversas linguagens (por exemplo, Terraform, Go, React, Python e JavaScript). "
         "Sua tarefa é analisar o código acima, identificando e listando quaisquer problemas críticos, tais como erros de sintaxe, falhas de segurança, bugs críticos ou violações das boas práticas de programação, "
-        "levando em conta as convenções de cada linguagem. Considere as seguintes orientações:\n\n"
-        "1. Se uma atribuição de variável para uma string apresenta o valor entre aspas (simples ou duplas), essa sintaxe deve ser considerada correta.\n"
-        "2. Linhas que contêm texto isolado (por exemplo, linhas de teste ou comentários informais) devem ser avaliadas com cautela e, se não fizerem parte do código funcional, não devem ser marcadas como erros críticos.\n"
-        "3. Verifique se o código segue as convenções e boas práticas da linguagem em que foi escrito.\n\n"
-        f"{language_info}"
-        "Além disso, para cada problema crítico, identifique a localização exata no código, informando o caminho do arquivo e o número da linha onde o problema ocorreu, para que seja possível inserir um comentário inline na revisão do Pull Request.\n\n"
+        "levando em conta as convenções de cada linguagem. "
+        "Além disso, para cada problema crítico, identifique a localização exata **no diff** onde o problema ocorreu, "
+        "informando o caminho do arquivo e a **posição no diff** (a contagem começa em 1 logo abaixo do cabeçalho '@@').\n\n"
         "Responda no seguinte formato JSON:\n\n"
         "{\n"
         '  "problemas_criticos": [\n'
-        '      {"arquivo": "caminho/do/arquivo", "linha": número_da_linha, "descricao": "descrição do problema"},\n'
+        '      {"arquivo": "caminho/do/arquivo", "posicao": número_da_posicao, "descricao": "descrição do problema"},\n'
         "      ...\n"
         "  ],\n"
         '  "sugestoes": ["sugestão 1", "sugestão 2", ...]\n'
         "}\n\n"
         "Caso não haja problemas críticos, a lista 'problemas_criticos' deverá ser vazia."
     )
+    debug_log("Prompt enviado para a API do OpenAI:")
+    debug_log(prompt)
     return prompt
 
 def chamar_api_openai(prompt, token):
@@ -157,12 +155,10 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     Mapeia a linha do arquivo (target_line) para a posição do diff onde
     o comentário inline deve ser inserido. A contagem é feita acumulando os hunks
     do diff do arquivo target_file. Dentro de cada hunk, a contagem reinicia 
-    (a primeira linha após o cabeçalho "@@" é considerada posição 1) e é acumulada 
+    (a linha imediatamente abaixo do cabeçalho "@@" é considerada posição 1) e é acumulada 
     ao longo dos hunks.
     
-    Em vez de contar apenas linhas que começam com " " ou "+", contamos todas as
-    linhas que não são remoções (ou seja, que não começam com "-").
-    
+    Contamos todas as linhas que não começam com "-" (remoções).
     Retorna o valor de position (um inteiro) ou None se não encontrar.
     """
     lines = diff.splitlines()
@@ -176,10 +172,10 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
             current_file = partes[3][2:]
             if current_file == target_file:
                 in_file = True
-                file_block = []  # reinicia o bloco para esse arquivo
+                file_block = []
             else:
                 if in_file:
-                    break  # já coletamos o bloco desejado
+                    break
                 in_file = False
         elif in_file:
             file_block.append(line)
@@ -192,21 +188,21 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
     while i < len(file_block):
         line = file_block[i]
         if line.startswith("@@"):
-            # Cabeçalho do hunk – extrai o número da primeira linha do novo arquivo.
+            # Cabeçalho do hunk: extrai o número da primeira linha do novo arquivo.
             m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
                 new_start = int(m.group(1))
             else:
                 new_start = 0
 
-            # A primeira linha após o cabeçalho é considerada posição 1
+            # A contagem relativa deste hunk começa com 1 para a primeira linha após o cabeçalho.
             hunk_position = 0
             simulated_line = new_start
             i += 1  # pula o cabeçalho
             while i < len(file_block) and not file_block[i].startswith("@@") and not file_block[i].startswith("diff --git "):
                 hunk_line = file_block[i]
                 hunk_position += 1
-                # Se a linha não for uma remoção, ela está presente no novo arquivo
+                # Se a linha não for uma remoção, ela aparece no novo arquivo.
                 if not hunk_line.startswith("-"):
                     if simulated_line == target_line:
                         return total_position + hunk_position + line_offset
@@ -223,7 +219,12 @@ def mapear_posicao_e_hunk(diff, target_file, target_line):
         offset = int(os.environ.get("LINE_OFFSET", "0"))
     except Exception:
         offset = 0
-    pos = mapear_posicao(diff, target_file, target_line, offset)
+    # Aqui ajustamos: se o modelo retorna um número que representa a linha original
+    # e queremos a posição no diff, podemos converter. Se o modelo já retornar a posição no diff,
+    # não é necessário. Neste caso, assumiremos que o modelo retornou a linha original,
+    # então somamos 1 para obter a posição correta.
+    target_line_adjusted = target_line + 1
+    pos = mapear_posicao(diff, target_file, target_line_adjusted, offset)
     return pos, None
 
 def post_review_to_pr(review_body, inline_comments, diff):
@@ -249,7 +250,6 @@ def post_review_to_pr(review_body, inline_comments, diff):
     commit_id = None
     if "pull_request" in event:
         pr_number = event["pull_request"]["number"]
-        # Extrai o SHA do commit HEAD do PR
         commit_id = event["pull_request"].get("head", {}).get("sha")
     elif "issue" in event and "pull_request" in event["issue"]:
         pr_number = event["issue"]["number"]
@@ -268,7 +268,6 @@ def post_review_to_pr(review_body, inline_comments, diff):
         arquivo = item.get("arquivo")
         linha = item.get("linha")
         descricao = item.get("descricao")
-        # Realiza o mapeamento da posição – ignoramos o diff_hunk
         pos, _ = mapear_posicao_e_hunk(diff, arquivo, linha)
         debug_log(f"Arquivo: {arquivo}, Linha: {linha}, Mapeado para posição: {pos}")
         if pos is not None:
@@ -278,7 +277,6 @@ def post_review_to_pr(review_body, inline_comments, diff):
                 "body": descricao
             })
         else:
-            # Se não conseguimos mapear para uma posição válida, adiciona no corpo da review
             comentarios_nao_inline.append(f"{arquivo}:{linha} -> {descricao}")
 
     if comentarios_nao_inline:
@@ -373,12 +371,11 @@ def main():
     debug_log("Diff oficial obtido:")
     debug_log(diff)
     
-    # Se o diff estiver vazio ou não tiver hunk(s), não há alterações significativas.
+    # Se o diff estiver vazio ou não tiver hunk(s), encerra.
     if not diff.strip() or "@@" not in diff:
         print("ℹ️  O diff está vazio ou não contém alterações significativas. Pulando o code review.")
         sys.exit(0)
     
-    # Se foi passado um padrão de regex para ignorar arquivos, aplica o filtro.
     ignore_pattern = sys.argv[2] if len(sys.argv) > 2 else ""
     if ignore_pattern:
         diff = filtrar_diff(diff, ignore_pattern)
@@ -416,7 +413,7 @@ def main():
     
     if problemas:
         review_body = "⚠️ **Code Review detectou problemas críticos!**\n\n" \
-                    "Por favor, verifique os comentários inline para detalhes sobre as mudanças necessárias."
+                      "Por favor, verifique os comentários inline para detalhes sobre as mudanças necessárias."
         post_review_to_pr(review_body, problemas, diff)
         print("\n⚠️ O Code Review detectou problemas críticos. Favor corrigir os itens listados e tentar novamente.")
         sys.exit(1)
