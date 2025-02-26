@@ -15,7 +15,7 @@ Esta GitHub Action executa um code review automatizado utilizando a API da OpenA
 Adicione o seguinte workflow ao repositório para executar a Action sempre que um Pull Request for aberto, atualizado ou reaberto:
 
 ```yaml
-ame: AI Code Review
+name: AI Code Review
 
 on:
   pull_request:
@@ -30,9 +30,9 @@ jobs:
       DEBUG: true
     steps:
       - name: Executar Code Review com OpenAI
-        uses: AcordoCertoBR/ai-code-review@v1.0.38
+        uses: AcordoCertoBR/ai-code-review@v1.0.39
         with:
-          ignore_regex: "^(?:\.github/|.*vendor/.*|.*\.(?:json|xml)$|go\.(?:mod|sum)$)"
+          ignore_regex: "^(?:\\.github/|.*vendor/.*|.*\\.(?:json|xml)$|go\\.(?:mod|sum)$)"
 ```
 
 ## 📥 Entradas (Inputs)

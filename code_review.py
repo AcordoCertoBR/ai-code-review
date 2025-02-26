@@ -154,60 +154,63 @@ def chamar_api_openai(prompt, token):
 
 def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
-    Mapeia a linha do arquivo (target_line) para a posição do diff onde
-    o comentário inline deve ser inserido, considerando que a contagem
-    reinicia a cada hunk (a linha imediatamente abaixo do cabeçalho "@@" é posição 1).
+    Mapeia o número da linha do arquivo (target_line) para o valor de position no diff
+    onde o comentário inline deve ser inserido.
     
-    Retorna a posição (um inteiro) ou None se não encontrar.
+    A contagem é feita acumulando os hunks do diff do arquivo target_file. 
+    Para cada hunk, a contagem relativa reinicia (a linha imediatamente abaixo do cabeçalho "@@" é 1),
+    e essa contagem é acumulada ao longo dos hunks.
+    
+    Retorna o valor de position (um inteiro) ou None se não encontrar.
     """
     lines = diff.splitlines()
     in_file = False
-    file_block = []
-
-    # Isola o bloco do diff referente ao arquivo target_file
-    for line in lines:
+    total_diff_position = 0  # acumulador do diff para o arquivo
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Detecta o início do bloco de diff para o arquivo target_file
         if line.startswith("diff --git "):
             partes = line.split()
             current_file = partes[3][2:]
             if current_file == target_file:
                 in_file = True
-                file_block = []  # reinicia o bloco para esse arquivo
             else:
                 if in_file:
                     break  # já coletamos o bloco desejado
                 in_file = False
-        elif in_file:
-            file_block.append(line)
+            i += 1
+            continue
 
-    if not file_block:
-        return None
-
-    # Percorre o bloco do arquivo em busca dos hunks
-    i = 0
-    while i < len(file_block):
-        line = file_block[i]
-        if line.startswith("@@"):
-            # Exemplo de cabeçalho de hunk:
-            # @@ -70,6 +70,8 @@ ...
+        if in_file and line.startswith("@@"):
+            # Cabeçalho de hunk: extrai o número da primeira linha do novo arquivo
             m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
                 new_start = int(m.group(1))
+                # new_count pode ser usado para validação, se necessário
+                new_count = int(m.group(2)) if m.group(2) else 1
             else:
                 new_start = 0
-
-            # Inicia a contagem para este hunk: a primeira linha depois do cabeçalho é posição 1
-            position_in_hunk = 1
-            current_line = new_start  # corresponde à numeração do arquivo novo
-            i += 1  # avança para as linhas do hunk
-            while i < len(file_block) and not file_block[i].startswith("@@"):
-                hunk_line = file_block[i]
-                # Apenas linhas de contexto (" ") ou adição ("+") aparecem no arquivo novo.
-                if hunk_line.startswith(" ") or hunk_line.startswith("+"):
-                    if current_line == target_line:
-                        return position_in_hunk + line_offset
-                    current_line += 1
-                    position_in_hunk += 1
+            # Reinicia a contagem relativa para este hunk: a primeira linha após o cabeçalho é posição 1.
+            hunk_diff_position = 0
+            simulated_new_line = new_start
+            i += 1  # pula o cabeçalho
+            # Percorre as linhas deste hunk
+            while i < len(lines) and not lines[i].startswith("@@") and not lines[i].startswith("diff --git "):
+                current_line = lines[i]
+                # Se a linha representa o novo arquivo (contexto ou adição)
+                if current_line.startswith(" ") or current_line.startswith("+"):
+                    hunk_diff_position += 1
+                    # Se a linha do novo arquivo corresponde ao target_line, retornamos o valor acumulado.
+                    if simulated_new_line == target_line:
+                        return total_diff_position + hunk_diff_position + line_offset
+                    simulated_new_line += 1
+                else:
+                    # Linhas de deleção ("-") não incrementam o número da linha no novo arquivo,
+                    # mas contam para a posição do diff.
+                    hunk_diff_position += 1
                 i += 1
+            total_diff_position += hunk_diff_position
         else:
             i += 1
 
