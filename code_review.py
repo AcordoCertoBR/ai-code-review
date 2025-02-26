@@ -154,22 +154,19 @@ def chamar_api_openai(prompt, token):
 
 def mapear_posicao(diff, target_file, target_line, line_offset=0):
     """
-    Mapeia o número da linha do arquivo (target_line) para o valor de position no diff
-    onde o comentário inline deve ser inserido.
+    Constrói um dicionário que mapeia os números de linha do arquivo novo (conforme o diff)
+    para a posição correspondente no diff (conforme a contagem contínua que o GitHub espera).
     
-    A contagem é feita acumulando os hunks do diff do arquivo target_file. 
-    Para cada hunk, a contagem relativa reinicia (a linha imediatamente abaixo do cabeçalho "@@" é 1),
-    e essa contagem é acumulada ao longo dos hunks.
-    
-    Retorna o valor de position (um inteiro) ou None se não encontrar.
+    Retorna a posição (um inteiro) para o target_line ou None se não encontrada.
     """
     lines = diff.splitlines()
     in_file = False
-    total_diff_position = 0  # acumulador do diff para o arquivo
+    new_line_to_diff = {}  # mapeamento: número da linha no novo arquivo -> posição no diff (1-indexado)
+    diff_position = 0      # contador de posição no diff (1-indexado)
     i = 0
     while i < len(lines):
         line = lines[i]
-        # Detecta o início do bloco de diff para o arquivo target_file
+        # Detecta o início do bloco para um arquivo
         if line.startswith("diff --git "):
             partes = line.split()
             current_file = partes[3][2:]
@@ -177,44 +174,45 @@ def mapear_posicao(diff, target_file, target_line, line_offset=0):
                 in_file = True
             else:
                 if in_file:
-                    break  # já coletamos o bloco desejado
+                    # Se já coletamos o bloco do arquivo desejado, interrompe.
+                    break
                 in_file = False
             i += 1
             continue
 
+        # Se estamos no bloco do arquivo, processa os hunks
         if in_file and line.startswith("@@"):
-            # Cabeçalho de hunk: extrai o número da primeira linha do novo arquivo
+            # Parse do cabeçalho do hunk para obter o número inicial do novo arquivo.
             m = re.search(r'\+(\d+)(?:,(\d+))?', line)
             if m:
                 new_start = int(m.group(1))
-                # new_count pode ser usado para validação, se necessário
-                new_count = int(m.group(2)) if m.group(2) else 1
             else:
                 new_start = 0
-            # Reinicia a contagem relativa para este hunk: a primeira linha após o cabeçalho é posição 1.
-            hunk_diff_position = 0
-            simulated_new_line = new_start
-            i += 1  # pula o cabeçalho
-            # Percorre as linhas deste hunk
+            # O cabeçalho em si não conta para a posição.
+            i += 1
+            # Processa todas as linhas deste hunk
             while i < len(lines) and not lines[i].startswith("@@") and not lines[i].startswith("diff --git "):
-                current_line = lines[i]
-                # Se a linha representa o novo arquivo (contexto ou adição)
-                if current_line.startswith(" ") or current_line.startswith("+"):
-                    hunk_diff_position += 1
-                    # Se a linha do novo arquivo corresponde ao target_line, retornamos o valor acumulado.
-                    if simulated_new_line == target_line:
-                        return total_diff_position + hunk_diff_position + line_offset
-                    simulated_new_line += 1
+                diff_position += 1
+                # Linhas que aparecem no novo arquivo são as que começam com " " (contexto) ou "+" (adição)
+                if lines[i].startswith(" ") or lines[i].startswith("+"):
+                    # Registra a posição correspondente à linha new_start do novo arquivo.
+                    # Se houver mais de uma ocorrência para a mesma linha (por exemplo, em casos de múltiplos hunks), 
+                    # o mapeamento será da primeira ocorrência.
+                    if new_start not in new_line_to_diff:
+                        new_line_to_diff[new_start] = diff_position
+                    new_start += 1
                 else:
-                    # Linhas de deleção ("-") não incrementam o número da linha no novo arquivo,
-                    # mas contam para a posição do diff.
-                    hunk_diff_position += 1
+                    # Linhas que começam com "-" não fazem parte do novo arquivo,
+                    # mas ainda contam para o diff_position.
+                    pass
                 i += 1
-            total_diff_position += hunk_diff_position
         else:
             i += 1
 
-    return None
+    if target_line in new_line_to_diff:
+        return new_line_to_diff[target_line] + line_offset
+    else:
+        return None
 
 def mapear_posicao_e_hunk(diff, target_file, target_line):
     try:
